@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import ArticlePreview from "../../components/ArticlePreview/ArticlePreview";
 import Head from "next/head";
@@ -8,8 +9,13 @@ import { LinkIcon } from "@heroicons/react/outline";
 import { api } from "@/server/trpc/react";
 import { useRouter } from "next/navigation";
 import { Session } from "next-auth";
+import ProfileHeader from "./ProfileHeader";
+import ProfileNavigation from "./ProfileNavigation";
+import PostSection from "./sections/PostsSection";
+import CommentSection from "./sections/DummySection";
+import DummySection from "./sections/DummySection";
 
-type Props = {
+export type ProfileProps = {
   session: Session | null;
   isOwner: boolean;
   profile: {
@@ -31,8 +37,13 @@ type Props = {
   };
 };
 
-const Profile = ({ profile, isOwner, session }: Props) => {
+const Profile = ({ profile, isOwner, session }: ProfileProps) => {
   const router = useRouter();
+  const [section, setSection] = useState("posts");
+  const [heading, setHeading] = useState({
+    title: "Published Posts",
+    count: 4,
+  });
 
   const { mutate: banUser } = api.admin.ban.useMutation({
     onSettled() {
@@ -67,6 +78,41 @@ const Profile = ({ profile, isOwner, session }: Props) => {
     }
   };
 
+  function setThePageState(state: string) {
+    console.log("fire");
+    setSection(state);
+
+    const heading = getSectionInfo(state);
+
+    console.log(heading);
+
+    setHeading(heading);
+  }
+
+  function getSectionInfo(section: string) {
+    if (section === "posts") {
+      return {
+        title: "Published Posts",
+        count: posts?.length,
+      };
+    } else if (section === "comments") {
+      return {
+        title: "Recent Comments",
+        count: 2,
+      };
+    } else if (section === "favourites") {
+      return {
+        title: "Favourites",
+        count: 2,
+      };
+    } else {
+      return {
+        title: "Followers",
+        count: 4,
+      };
+    }
+  }
+
   return (
     <>
       <Head>
@@ -90,80 +136,26 @@ const Profile = ({ profile, isOwner, session }: Props) => {
         <meta property="og:type" content="website" />
       </Head>
       <div className="max-w-2xl px-4 mx-auto text-900 dark:text-white">
-        <main className="flex pt-6">
-          <div className="mr-4 flex-shrink-0 self-center">
-            {image && (
-              <img
-                className="rounded-full object-cover h-32 w-32"
-                alt={`Avatar for ${name}`}
-                src={image}
-              />
-            )}
-          </div>
-          <div className="flex flex-col justify-center">
-            <h1 className="text-lg md:text-xl font-bold mb-0">{name}</h1>
-            <h2 className="text-neutral-500 dark:text-neutral-400 font-bold text-sm">
-              @{username}
-            </h2>
-            <p className="mt-1">{bio}</p>
-            {websiteUrl && !accountLocked && (
-              <Link
-                href={websiteUrl}
-                className="flex flex-row items-center"
-                target="blank"
-              >
-                <LinkIcon className="h-5 mr-2 text-neutral-500 dark:text-neutral-400" />
-                <p className="mt-1 text-blue-500">
-                  {getDomainFromUrl(websiteUrl)}
-                </p>
-              </Link>
-            )}
-          </div>
-        </main>
-        {accountLocked ? (
-          <div className="flex items-center justify-between pb-4 mt-8 text-3xl font-extrabold tracking-tight border-b sm:text-4xl text-neutral-900 dark:text-neutral-50">
-            <h1>Account locked 🔒</h1>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between pb-4 mt-8 text-3xl font-extrabold tracking-tight border-b sm:text-4xl text-neutral-900 dark:text-neutral-50">
-            <h1>Published articles</h1>
-            <span className="font-light">({posts.length})</span>
-          </div>
-        )}
+        <ProfileHeader profile={profile} isOwner={isOwner} session={session} />
+        <ProfileNavigation
+          posts={profile.posts}
+          accountLocked={accountLocked}
+          navigationStateHandler={setThePageState}
+          heading={heading}
+        />
 
-        {posts.length ? (
-          posts.map(({ slug, title, excerpt, readTimeMins, published, id }) => {
-            if (!published) return;
-            return (
-              <ArticlePreview
-                key={slug}
-                slug={slug}
-                title={title}
-                excerpt={excerpt}
-                name={name}
-                username={username || ""}
-                image={image}
-                date={published}
-                readTime={readTimeMins}
-                menuOptions={
-                  isOwner
-                    ? [
-                        {
-                          label: "Edit",
-                          href: `/create/${id}`,
-                          postId: id,
-                        },
-                      ]
-                    : undefined
-                }
-                showBookmark={!isOwner}
-                id={id}
-              />
-            );
-          })
-        ) : (
-          <p className="font-medium py-4">Nothing published yet... 🥲</p>
-        )}
+        <AnimatePresence mode="wait">
+          {section === "posts" ? (
+            <PostSection
+              key="posts"
+              profile={profile}
+              isOwner={isOwner}
+              session={session}
+            />
+          ) : (
+            <DummySection id={section} key={section} />
+          )}
+        </AnimatePresence>
       </div>
       {session?.user?.role === "ADMIN" && (
         <div className="border-t-2 text-center pb-8">
@@ -205,7 +197,7 @@ const Profile = ({ profile, isOwner, session }: Props) => {
 
 export default Profile;
 
-function getDomainFromUrl(url: string) {
+export function getDomainFromUrl(url: string) {
   const domain = url.replace(/(https?:\/\/)?(www.)?/i, "");
   if (domain[domain.length - 1] === "/") {
     return domain.slice(0, domain.length - 1);
