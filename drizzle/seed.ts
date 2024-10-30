@@ -7,14 +7,16 @@ import "dotenv/config";
 
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import {
+  E2E_USER_ONE_EMAIL,
+  E2E_USER_ONE_ID,
+  E2E_USER_TWO_EMAIL,
+  E2E_USER_TWO_ID,
+  E2E_USER_ONE_SESSION_ID,
+  E2E_USER_TWO_SESSION_ID,
+} from "../e2e/constants";
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
-// These can be removed in a follow on PR. Until this hits main we cant add E2E_USER_* stuff to the env.
-const E2E_SESSION_ID =
-  process.env.E2E_USER_ONE_SESSION_ID || "df8a11f2-f20a-43d6-80a0-a213f1efedc1";
-const E2E_USER_ID =
-  process.env.E2E_USER_ID || "8e3179ce-f32b-4d0a-ba3b-234d66b836ad";
-const E2E_USER_EMAIL = process.env.E2E_USER_EMAIL || "e2e@codu.co";
 
 if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
@@ -116,13 +118,11 @@ ${chance.paragraph()}
     return users;
   };
 
-  const seedE2EUser = async () => {
-    const name = "E2E Test User";
-
+  const seedE2EUser = async (email: string, id: string, name: string) => {
     const [existingE2EUser] = await db
       .selectDistinct()
       .from(user)
-      .where(eq(user.id, E2E_USER_ID));
+      .where(eq(user.id, id));
 
     if (existingE2EUser) {
       console.log("E2E Test user already exists. Skipping creation");
@@ -130,13 +130,13 @@ ${chance.paragraph()}
     }
 
     const userData = {
-      id: E2E_USER_ID,
+      id: id,
       username: `${name.split(" ").join("-").toLowerCase()}-${chance.integer({
         min: 0,
         max: 999,
       })}`,
       name,
-      email: E2E_USER_EMAIL,
+      email,
       image: `https://robohash.org/${encodeURIComponent(name)}?bgset=bg1`,
       location: chance.country({ full: true }),
       bio: chance.sentence({ words: 10 }),
@@ -146,11 +146,11 @@ ${chance.paragraph()}
     return createdUser;
   };
 
-  const seedE2EUserSession = async (userId: string) => {
+  const seedE2EUserSession = async (userId: string, sessionToken: string) => {
     const [existingE2EUserSession] = await db
       .selectDistinct()
       .from(session)
-      .where(eq(session.sessionToken, E2E_SESSION_ID));
+      .where(eq(session.sessionToken, sessionToken));
 
     if (existingE2EUserSession) {
       console.log("E2E Test session already exists. Skipping creation");
@@ -164,7 +164,7 @@ ${chance.paragraph()}
         .insert(session)
         .values({
           userId,
-          sessionToken: E2E_SESSION_ID,
+          sessionToken,
           // Set session to expire in 6 months.
           expires: new Date(currentDate.setMonth(currentDate.getMonth() + 6)),
         })
@@ -249,8 +249,19 @@ ${chance.paragraph()}
 
     try {
       await addUserData();
-      const user = await seedE2EUser();
-      await seedE2EUserSession(user.id);
+      const userOne = await seedE2EUser(
+        E2E_USER_ONE_EMAIL,
+        E2E_USER_ONE_ID,
+        "E2E Test User One",
+      );
+      const userTwo = await seedE2EUser(
+        E2E_USER_TWO_EMAIL,
+        E2E_USER_TWO_ID,
+        "E2E Test User Two",
+      );
+
+      await seedE2EUserSession(userOne.id, E2E_USER_ONE_SESSION_ID);
+      await seedE2EUserSession(userTwo.id, E2E_USER_TWO_SESSION_ID);
     } catch (error) {
       console.log("Error:", error);
     }
